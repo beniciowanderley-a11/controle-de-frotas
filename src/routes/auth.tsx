@@ -96,28 +96,6 @@ function AuthPage() {
     }
   }
 
-  async function handleGoogleLogin() {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/auth`,
-        },
-      });
-      if (error) throw error;
-      if (data.url) {
-        window.location.assign(data.url);
-      } else {
-        navigate({ to: "/dashboard", replace: true });
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao iniciar login com Google");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   return (
     <div className="min-h-screen flex items-center justify-center px-4 bg-gradient-to-br from-sidebar via-sidebar to-primary">
       <div className="w-full max-w-md">
@@ -148,19 +126,6 @@ function AuthPage() {
                 Enviar link de acesso
               </Button>
             </form>
-            <div className="mt-4">
-              <div className="flex items-center justify-center gap-2 text-sm text-sidebar-foreground/80">
-                <span>ou</span>
-              </div>
-              <Button
-                variant="secondary"
-                className="mt-3 w-full"
-                onClick={() => handleGoogleLogin()}
-                disabled={loading}
-              >
-                Entrar com Google
-              </Button>
-            </div>
           </CardContent>
         </Card>
         <p className="mt-4 text-center text-xs text-sidebar-foreground/70">
