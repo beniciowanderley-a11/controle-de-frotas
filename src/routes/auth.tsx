@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Truck } from "lucide-react";
 import { toast } from "sonner";
+import { useServerFn } from "@tanstack/react-start";
+import { quickLogin } from "@/lib/quick-login.functions";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({ meta: [{ title: "Acesso — Frotas" }] }),
@@ -20,16 +22,16 @@ const emailSchema = z.object({
     .trim()
     .email("E-mail inválido")
     .max(255)
-    .refine(
-      (email) => email.toLowerCase().endsWith("@educacao.mg.gov.br"),
-      { message: "Apenas e-mails @educacao.mg.gov.br podem acessar" }
-    ),
+    .refine((email) => email.toLowerCase().endsWith("@educacao.mg.gov.br"), {
+      message: "Apenas e-mails @educacao.mg.gov.br podem acessar",
+    }),
 });
 
 function AuthPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const quickLoginFn = useServerFn(quickLogin);
 
   useEffect(() => {
     async function syncSession() {
@@ -110,12 +112,11 @@ function AuthPage() {
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email: parsed.data.email,
-        options: { emailRedirectTo: `${window.location.origin}/auth` },
-      });
-      if (error) throw error;
-      setNotice("Enviamos um link de acesso para o seu e-mail. Abra-o e retorne a esta página.");
+      const res = await quickLoginFn({ email: parsed.data.email });
+      if (!res || !res.token) throw new Error("Resposta inválida do servidor");
+      if (typeof window !== "undefined") localStorage.setItem("APP_QUICK_JWT", res.token);
+      setNotice("Login realizado. Redirecionando...");
+      navigate({ to: "/complete-profile", replace: true });
     } catch (err) {
       const message =
         err instanceof Error
@@ -123,8 +124,8 @@ function AuthPage() {
           : err && typeof err === "object"
           ? JSON.stringify(err)
           : String(err);
-      console.error("signInWithOtp error:", err);
-      toast.error(message || "Erro ao enviar link de acesso");
+      console.error("quickLogin error:", err);
+      toast.error(message || "Erro ao efetuar login");
     } finally {
       setLoading(false);
     }
@@ -143,13 +144,11 @@ function AuthPage() {
         <Card className="shadow-elev">
           <CardHeader>
             <CardTitle>Acesso ao sistema</CardTitle>
-            <CardDescription>Insira seu e-mail @educacao.mg.gov.br e receba um link de acesso.</CardDescription>
+            <CardDescription>Insira seu e-mail @educacao.mg.gov.br e entre sem senha.</CardDescription>
           </CardHeader>
           <CardContent>
             {notice ? (
-              <div className="rounded-lg border border-border/50 bg-muted p-4 text-sm text-foreground">
-                {notice}
-              </div>
+              <div className="rounded-lg border border-border/50 bg-muted p-4 text-sm text-foreground">{notice}</div>
             ) : null}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
@@ -157,7 +156,7 @@ function AuthPage() {
                 <Input id="email" name="email" type="email" required maxLength={255} />
               </div>
               <Button type="submit" className="w-full" disabled={loading}>
-                Enviar link de acesso
+                Entrar (sem senha)
               </Button>
             </form>
           </CardContent>

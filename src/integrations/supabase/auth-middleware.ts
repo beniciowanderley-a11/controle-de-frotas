@@ -3,6 +3,7 @@ import { createMiddleware } from '@tanstack/react-start'
 import { getRequest } from '@tanstack/react-start/server'
 import { createClient } from '@supabase/supabase-js'
 import type { Database } from './types'
+import { verifyJwt } from '@/lib/jwt';
 
 
 
@@ -41,6 +42,26 @@ export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server
     const token = authHeader.replace('Bearer ', '');
     if (!token) {
       throw new Error('Unauthorized: No token provided');
+    }
+
+    // Try our own JWT first (quick-login)
+    const JWT_SECRET = process.env.JWT_SECRET;
+    if (JWT_SECRET) {
+      try {
+        const payload = verifyJwt(token, JWT_SECRET);
+        if (payload && payload.sub) {
+          const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
+          return next({
+            context: {
+              supabase: supabaseAdmin,
+              userId: payload.sub,
+              claims: payload,
+            },
+          });
+        }
+      } catch (e) {
+        // Not our JWT, fallthrough to Supabase verification
+      }
     }
 
     const supabase = createClient<Database>(
