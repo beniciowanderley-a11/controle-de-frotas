@@ -42,21 +42,24 @@ function AuthPage() {
       if (
         typeof window !== "undefined" &&
         (window.location.href.includes("access_token") ||
+          window.location.href.includes("refresh_token") ||
           window.location.href.includes("type=magiclink") ||
-          window.location.href.includes("refresh_token"))
+          window.location.href.includes("type=oauth"))
       ) {
         setNotice("Finalizando login... Aguarde um momento.");
         const { data, error } = await supabase.auth.getSessionFromUrl();
         if (error) {
           console.error(error);
-          toast.error("Erro ao processar o link de acesso.");
+          toast.error("Erro ao processar o login de redirecionamento.");
           setNotice("Não foi possível completar o login. Tente novamente.");
           return;
         }
         if (data.session) {
           window.history.replaceState({}, document.title, window.location.pathname);
           navigate({ to: "/dashboard", replace: true });
+          return;
         }
+        toast.error("Link de acesso inválido ou expirado.");
       }
     }
 
@@ -93,6 +96,28 @@ function AuthPage() {
     }
   }
 
+  async function handleGoogleLogin() {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/auth`,
+        },
+      });
+      if (error) throw error;
+      if (data.url) {
+        window.location.assign(data.url);
+      } else {
+        navigate({ to: "/dashboard", replace: true });
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao iniciar login com Google");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center px-4 bg-gradient-to-br from-sidebar via-sidebar to-primary">
       <div className="w-full max-w-md">
@@ -123,6 +148,19 @@ function AuthPage() {
                 Enviar link de acesso
               </Button>
             </form>
+            <div className="mt-4">
+              <div className="flex items-center justify-center gap-2 text-sm text-sidebar-foreground/80">
+                <span>ou</span>
+              </div>
+              <Button
+                variant="secondary"
+                className="mt-3 w-full"
+                onClick={() => handleGoogleLogin()}
+                disabled={loading}
+              >
+                Entrar com Google
+              </Button>
+            </div>
           </CardContent>
         </Card>
         <p className="mt-4 text-center text-xs text-sidebar-foreground/70">
