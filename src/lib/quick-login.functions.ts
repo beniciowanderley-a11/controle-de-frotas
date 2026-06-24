@@ -11,33 +11,17 @@ export const quickLogin = createServerFn({ method: "POST" })
       throw new Error("E-mail não autorizado");
     }
 
-    // Find existing profile
-    const { data: existing, error: selErr } = await supabaseAdmin
-      .from("profiles")
-      .select("id")
-      .eq("email", email)
-      .limit(1)
-      .maybeSingle();
-    if (selErr) {
-      console.error("quickLogin select error:", selErr);
-      throw selErr;
+    const { data: userIdData, error: rpcErr } = await supabaseAdmin.rpc(
+      "get_or_create_profile_by_email",
+      { _email: email }
+    );
+    if (rpcErr) {
+      console.error("quickLogin rpc error:", rpcErr);
+      throw rpcErr;
     }
-
-    let userId: string;
-    if (existing && (existing as any).id) {
-      userId = (existing as any).id;
-    } else {
-      const id = typeof crypto !== "undefined" && (crypto as any).randomUUID ? (crypto as any).randomUUID() : String(Date.now()) + Math.random().toString(36).slice(2);
-      const { data: ins, error: insErr } = await supabaseAdmin
-        .from("profiles")
-        .insert({ id, email, status: "active" })
-        .select("id")
-        .maybeSingle();
-      if (insErr) {
-        console.error("quickLogin insert error:", insErr);
-        throw insErr;
-      }
-      userId = (ins as any).id;
+    const userId = (userIdData as any) as string;
+    if (!userId) {
+      throw new Error("Não foi possível criar ou localizar o perfil");
     }
 
     const secret = process.env.JWT_SECRET;

@@ -11,10 +11,11 @@ export const completeProfile = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context as any;
-    const update: any = {};
-    if (data.full_name) update.full_name = data.full_name;
-    if (data.masp) update.masp = data.masp;
-    const { error } = await supabase.from("profiles").update(update).eq("id", userId);
+    const { error } = await supabase.rpc("update_profile_by_user_id", {
+      _user_id: userId,
+      _full_name: data.full_name ?? null,
+      _masp: data.masp ?? null,
+    });
     if (error) throw error;
     return { ok: true };
   });
