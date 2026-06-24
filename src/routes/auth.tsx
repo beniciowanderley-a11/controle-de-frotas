@@ -39,26 +39,35 @@ function AuthPage() {
         return;
       }
 
-      if (
-        typeof window !== "undefined" &&
-        (window.location.href.includes("access_token") ||
-          window.location.href.includes("refresh_token") ||
-          window.location.href.includes("type=magiclink"))
-      ) {
+      if (typeof window !== "undefined") {
         setNotice("Finalizando login... Aguarde um momento.");
-        const { data, error } = await supabase.auth.getSessionFromUrl();
+        const { data, error } = await supabase.auth.getSessionFromUrl({ storeSession: true });
         if (error) {
-          console.error(error);
-          toast.error("Erro ao processar o login de redirecionamento.");
+          console.error("getSessionFromUrl error:", error);
+          const { data: currentSession } = await supabase.auth.getSession();
+          if (currentSession.session) {
+            window.history.replaceState({}, document.title, window.location.pathname);
+            navigate({ to: "/dashboard", replace: true });
+            return;
+          }
           setNotice("Não foi possível completar o login. Tente novamente.");
           return;
         }
+
         if (data.session) {
           window.history.replaceState({}, document.title, window.location.pathname);
           navigate({ to: "/dashboard", replace: true });
           return;
         }
-        toast.error("Login inválido ou expirado.");
+
+        const { data: currentSession } = await supabase.auth.getSession();
+        if (currentSession.session) {
+          window.history.replaceState({}, document.title, window.location.pathname);
+          navigate({ to: "/dashboard", replace: true });
+          return;
+        }
+
+        setNotice(null);
       }
     }
 
@@ -105,7 +114,7 @@ function AuthPage() {
         <Card className="shadow-elev">
           <CardHeader>
             <CardTitle>Acesso ao sistema</CardTitle>
-            <CardDescription>Use seu e-mail @educacao.mg.gov.br para entrar.</CardDescription>
+            <CardDescription>Insira seu e-mail @educacao.mg.gov.br e receba um link de acesso.</CardDescription>
           </CardHeader>
           <CardContent>
             {notice ? (
