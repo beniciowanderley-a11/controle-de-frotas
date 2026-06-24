@@ -29,17 +29,46 @@ const emailSchema = z.object({
 function AuthPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) navigate({ to: "/dashboard", replace: true });
-    });
+    async function syncSession() {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData.session) {
+        navigate({ to: "/dashboard", replace: true });
+        return;
+      }
+
+      if (
+        typeof window !== "undefined" &&
+        (window.location.href.includes("access_token") ||
+          window.location.href.includes("type=magiclink") ||
+          window.location.href.includes("refresh_token"))
+      ) {
+        setNotice("Finalizando login... Aguarde um momento.");
+        const { data, error } = await supabase.auth.getSessionFromUrl();
+        if (error) {
+          console.error(error);
+          toast.error("Erro ao processar o link de acesso.");
+          setNotice("Não foi possível completar o login. Tente novamente.");
+          return;
+        }
+        if (data.session) {
+          window.history.replaceState({}, document.title, window.location.pathname);
+          navigate({ to: "/dashboard", replace: true });
+        }
+      }
+    }
+
+    syncSession();
   }, [navigate]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const raw = { email: fd.get("email") };
+    const raw = {
+      email: fd.get("email"),
+    };
     const parsed = emailSchema.safeParse(raw);
     if (!parsed.success) {
       toast.error(parsed.error.issues[0].message);
@@ -50,12 +79,15 @@ function AuthPage() {
     try {
       const { error } = await supabase.auth.signInWithOtp({
         email: parsed.data.email,
-        options: { emailRedirectTo: window.location.origin },
+        options: { emailRedirectTo: `${window.location.origin}/auth` },
       });
       if (error) throw error;
-      toast.success("Link de login enviado. Verifique seu e-mail.");
+      setNotice(
+        "Enviamos um link de acesso para o seu e-mail. Abra-o e retorne a esta página."
+      );
+      toast.success("Link de acesso enviado. Verifique seu e-mail.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao enviar link de login");
+      toast.error(err instanceof Error ? err.message : "Erro ao enviar o link de acesso");
     } finally {
       setLoading(false);
     }
@@ -77,13 +109,18 @@ function AuthPage() {
             <CardDescription>Use seu e-mail @educacao.mg.gov.br para entrar.</CardDescription>
           </CardHeader>
           <CardContent>
+            {notice ? (
+              <div className="rounded-lg border border-border/50 bg-muted p-4 text-sm text-foreground">
+                {notice}
+              </div>
+            ) : null}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">E-mail</Label>
                 <Input id="email" name="email" type="email" required maxLength={255} />
               </div>
               <Button type="submit" className="w-full" disabled={loading}>
-                Enviar link de login
+                Enviar link de acesso
               </Button>
             </form>
           </CardContent>
