@@ -39,36 +39,58 @@ function AuthPage() {
         return;
       }
 
-      if (typeof window !== "undefined") {
-        setNotice("Finalizando login... Aguarde um momento.");
-        const { data, error } = await supabase.auth.getSessionFromUrl({ storeSession: true });
-        if (error) {
-          console.error("getSessionFromUrl error:", error);
-          const { data: currentSession } = await supabase.auth.getSession();
-          if (currentSession.session) {
-            window.history.replaceState({}, document.title, window.location.pathname);
-            navigate({ to: "/dashboard", replace: true });
-            return;
-          }
-          setNotice("Não foi possível completar o login. Tente novamente.");
-          return;
-        }
+      if (typeof window === "undefined") return;
 
-        if (data.session) {
-          window.history.replaceState({}, document.title, window.location.pathname);
-          navigate({ to: "/dashboard", replace: true });
-          return;
-        }
+      const hash = window.location.hash;
+      const search = window.location.search;
+      const hasCallbackParams =
+        hash.includes("access_token") ||
+        hash.includes("refresh_token") ||
+        hash.includes("type=magiclink") ||
+        search.includes("access_token") ||
+        search.includes("refresh_token") ||
+        search.includes("type=magiclink");
 
+      if (!hasCallbackParams) {
+        setNotice(null);
+        return;
+      }
+
+      setNotice("Finalizando login... Aguarde um momento.");
+      const { data, error } = await supabase.auth.getSessionFromUrl({ storeSession: true });
+      if (error) {
+        console.error("getSessionFromUrl error:", error);
         const { data: currentSession } = await supabase.auth.getSession();
         if (currentSession.session) {
           window.history.replaceState({}, document.title, window.location.pathname);
           navigate({ to: "/dashboard", replace: true });
           return;
         }
-
-        setNotice(null);
+        const errorMessage =
+          error instanceof Error
+            ? error.message
+            : error && typeof error === "object"
+            ? JSON.stringify(error, Object.getOwnPropertyNames(error))
+            : String(error);
+        toast.error(errorMessage || "Erro ao processar o login de redirecionamento.");
+        setNotice("Não foi possível completar o login. Tente novamente.");
+        return;
       }
+
+      if (data.session) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+        navigate({ to: "/dashboard", replace: true });
+        return;
+      }
+
+      const { data: currentSession } = await supabase.auth.getSession();
+      if (currentSession.session) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+        navigate({ to: "/dashboard", replace: true });
+        return;
+      }
+
+      setNotice(null);
     }
 
     syncSession();
@@ -95,7 +117,14 @@ function AuthPage() {
       if (error) throw error;
       setNotice("Enviamos um link de acesso para o seu e-mail. Abra-o e retorne a esta página.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao enviar link de acesso");
+      const message =
+        err instanceof Error
+          ? err.message
+          : err && typeof err === "object"
+          ? JSON.stringify(err)
+          : String(err);
+      console.error("signInWithOtp error:", err);
+      toast.error(message || "Erro ao enviar link de acesso");
     } finally {
       setLoading(false);
     }
