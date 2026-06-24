@@ -1,7 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Truck } from "lucide-react";
 import { toast } from "sonner";
@@ -11,8 +14,21 @@ export const Route = createFileRoute("/auth")({
   component: AuthPage,
 });
 
+const emailSchema = z.object({
+  email: z
+    .string()
+    .trim()
+    .email("E-mail inválido")
+    .max(255)
+    .refine(
+      (email) => email.toLowerCase().endsWith("@educacao.mg.gov.br"),
+      { message: "Apenas e-mails @educacao.mg.gov.br podem acessar" }
+    ),
+});
+
 function AuthPage() {
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
@@ -27,7 +43,7 @@ function AuthPage() {
         typeof window !== "undefined" &&
         (window.location.href.includes("access_token") ||
           window.location.href.includes("refresh_token") ||
-          window.location.href.includes("type=oauth"))
+          window.location.href.includes("type=magiclink"))
       ) {
         setNotice("Finalizando login... Aguarde um momento.");
         const { data, error } = await supabase.auth.getSessionFromUrl();
@@ -49,23 +65,30 @@ function AuthPage() {
     syncSession();
   }, [navigate]);
 
-  async function handleGoogleLogin() {
-    setNotice("Abrindo Google para autenticação...");
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const raw = {
+      email: fd.get("email"),
+    };
+    const parsed = emailSchema.safeParse(raw);
+    if (!parsed.success) {
+      toast.error(parsed.error.issues[0].message);
+      return;
+    }
+
+    setLoading(true);
     try {
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/auth`,
-        },
+      const { error } = await supabase.auth.signInWithOtp({
+        email: parsed.data.email,
+        options: { emailRedirectTo: `${window.location.origin}/auth` },
       });
       if (error) throw error;
-      if (data.url) {
-        window.location.assign(data.url);
-      }
+      setNotice("Enviamos um link de acesso para o seu e-mail. Abra-o e retorne a esta página.");
     } catch (err) {
-      console.error(err);
-      toast.error(err instanceof Error ? err.message : "Erro ao iniciar login com Google");
-      setNotice(null);
+      toast.error(err instanceof Error ? err.message : "Erro ao enviar link de acesso");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -90,15 +113,15 @@ function AuthPage() {
                 {notice}
               </div>
             ) : null}
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Clique no botão abaixo para autenticar com sua conta Google.
-                Se você estiver logado no Google, bastará selecionar o e-mail correto.
-              </p>
-              <Button className="w-full" onClick={handleGoogleLogin}>
-                Entrar com Google
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email">E-mail</Label>
+                <Input id="email" name="email" type="email" required maxLength={255} />
+              </div>
+              <Button type="submit" className="w-full" disabled={loading}>
+                Enviar link de acesso
               </Button>
-            </div>
+            </form>
           </CardContent>
         </Card>
         <p className="mt-4 text-center text-xs text-sidebar-foreground/70">
